@@ -1,0 +1,5 @@
+dist/
+samples/
+*.iconset/
+.DS_Store
+__pycache__/

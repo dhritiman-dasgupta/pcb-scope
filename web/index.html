@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCB Scope</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='5' fill='%23143d2b'/%3E%3Crect x='10' y='10' width='12' height='12' rx='1.5' fill='%2310171d' stroke='%233ddc97' stroke-width='1.5'/%3E%3Cpath d='M13 10V5M16 10V5M19 10V5M13 27v-5M16 27v-5M19 27v-5M5 13h5M5 16h5M5 19h5M27 13h-5M27 16h-5M27 19h-5' stroke='%23d9e3c7' stroke-width='1.5'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0b0e12; --panel: #12171d; --panel2: #171d25; --line: #232b36; --line2: #2e3845;
+  --text: #dbe2ea; --muted: #8592a3; --dim: #5d6876;
+  --accent: #3ddc97; --accent-ink: #062418; --warn: #ffb84d; --bad: #ff5d6c;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 13px/1.4 var(--sans); overflow: hidden; }
+button, select, input { font: inherit; color: inherit; }
+button {
+  background: var(--panel2); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+  white-space: nowrap;
+}
+button:hover { border-color: #46566a; background: #1c2430; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button.on { border-color: var(--accent); color: var(--accent); background: rgba(61,220,151,.08); }
+button:disabled { opacity: .45; cursor: default; }
+select, input[type=number], input[type=text] {
+  background: var(--bg); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 6px; min-width: 0;
+}
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=checkbox] { accent-color: var(--accent); }
+kbd { font: 11px var(--mono); padding: 0 4px; border: 1px solid var(--line2); border-radius: 4px; color: var(--muted); }
+
+.app { display: grid; grid-template-rows: 46px 1fr; height: 100vh; }
+header {
+  display: flex; align-items: center; gap: 14px; padding: 0 12px; border-bottom: 1px solid var(--line);
+  background: var(--panel); min-width: 0;
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .2px; }
+.brand svg { width: 22px; height: 22px; }
+.chip { font: 12px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip b { color: var(--text); font-weight: 500; }
+.focus { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.focus .lbl { color: var(--muted); font-size: 12px; }
+.meter { width: 150px; height: 10px; border-radius: 5px; background: var(--bg); border: 1px solid var(--line2); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff5d6c, #ffb84d 55%, #3ddc97 90%); background-size: 150px 100%; transition: width .12s; }
+.spacer { flex: 1; }
+.hdr-btns { display: flex; gap: 6px; }
+
+main { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+#stage { position: relative; overflow: hidden; background: #050709; min-width: 0; touch-action: none; }
+#stage canvas { position: absolute; inset: 0; }
+#cvOvl { cursor: grab; }
+#stage.tool-measure #cvOvl, #stage.tool-calib #cvOvl, #stage.tool-ocr #cvOvl { cursor: crosshair; }
+#stage.panning #cvOvl { cursor: grabbing; }
+
+.toolbar {
+  position: absolute; top: 10px; left: 10px; display: flex; gap: 4px; padding: 4px; border-radius: 8px;
+  background: rgba(18,23,29,.86); border: 1px solid var(--line); backdrop-filter: blur(6px);
+}
+.toolbar button { padding: 4px 8px; font-size: 12px; }
+.toolbar .sep { width: 1px; background: var(--line2); margin: 2px 2px; }
+.statusbar {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 10px; font: 11.5px var(--mono); color: var(--muted);
+  background: linear-gradient(transparent, rgba(5,7,9,.9) 40%); display: flex; gap: 16px; flex-wrap: wrap; pointer-events: none;
+}
+.statusbar b { color: var(--text); font-weight: 500; }
+.tip {
+  position: absolute; pointer-events: none; padding: 6px 8px; border-radius: 6px; background: rgba(12,15,19,.94);
+  border: 1px solid var(--line2); font: 12px var(--mono); max-width: 280px; z-index: 5; white-space: pre-line;
+}
+.empty {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted);
+}
+.empty .card { padding: 26px 30px; border: 1px dashed var(--line2); border-radius: 12px; background: rgba(18,23,29,.6); max-width: 420px; }
+.empty h2 { margin: 0 0 6px; color: var(--text); font-size: 17px; }
+.empty .row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+.banner { position: absolute; top: 56px; left: 10px; right: 10px; padding: 10px 12px; border-radius: 8px; background: #3a1d22; border: 1px solid #6b2a33; color: #ffd6da; z-index: 6; }
+.dialog {
+  position: absolute; z-index: 7; top: 60px; left: 50%; transform: translateX(-50%); width: 340px;
+  background: var(--panel); border: 1px solid var(--line2); border-radius: 10px; padding: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+}
+.dialog h3 { margin: 0 0 8px; font-size: 14px; }
+.dialog .presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.dialog .presets button { padding: 2px 7px; font-size: 12px; }
+.dialog .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.dialog .row input { flex: 1; }
+.drop-hint { position: absolute; inset: 8px; border: 2px dashed var(--accent); border-radius: 12px; display: grid; place-items: center; color: var(--accent); font-size: 16px; background: rgba(61,220,151,.06); z-index: 8; pointer-events: none; }
+.toast { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--line2); z-index: 9; transition: opacity .3s; }
+
+aside { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; min-height: 0; }
+details { border-bottom: 1px solid var(--line); }
+summary {
+  list-style: none; cursor: pointer; padding: 10px 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; user-select: none;
+}
+summary::-webkit-details-marker { display: none; }
+summary::before { content: '▸'; color: var(--dim); font-size: 11px; transition: transform .15s; }
+details[open] > summary::before { transform: rotate(90deg); }
+summary .aux { margin-left: auto; font: 11.5px var(--mono); color: var(--muted); font-weight: 400; }
+.sec { padding: 0 14px 12px; display: grid; gap: 8px; }
+.row { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.row > select { flex: 1; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.hint { color: var(--muted); font-size: 12px; }
+.check { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; align-items: center; }
+.slider label { color: var(--muted); font-size: 12px; }
+.slider output { font: 11.5px var(--mono); color: var(--text); text-align: right; min-width: 34px; }
+.slider input { grid-column: 1 / -1; }
+.grp { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin-top: 4px; }
+
+.layers { display: grid; gap: 2px; }
+.layer { display: grid; grid-template-columns: 16px 10px 1fr auto; gap: 8px; align-items: center; padding: 3px 4px; border-radius: 5px; cursor: pointer; user-select: none; }
+.layer:hover { background: var(--panel2); }
+.layer .sw { width: 10px; height: 10px; border-radius: 3px; }
+.layer .n { font: 12px var(--mono); color: var(--muted); }
+.maskinfo { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.maskinfo .sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line2); }
+.list { max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.list .it { display: grid; grid-template-columns: 10px auto 1fr; gap: 8px; align-items: center; padding: 4px 8px; cursor: pointer; font: 12px var(--mono); border-bottom: 1px solid #141a21; }
+.list .it:hover, .list .it.sel { background: #18202a; }
+.list .it .sw { width: 8px; height: 8px; border-radius: 2px; }
+.list .it .meta { color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .empty-l { padding: 10px; color: var(--dim); font-size: 12px; }
+.selbox { border: 1px solid var(--line2); border-radius: 6px; padding: 8px 10px; font: 12px var(--mono); background: var(--bg); white-space: pre-line; }
+.ocr-out { font: 600 18px var(--mono); letter-spacing: .5px; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 6px; background: var(--bg); min-height: 40px; white-space: pre-wrap; word-break: break-all; }
+.ocr-prev { max-width: 100%; border-radius: 4px; border: 1px solid var(--line); background: #fff; display: block; }
+.status-ok { color: var(--accent); } .status-warn { color: var(--warn); } .status-bad { color: var(--bad); }
+.links a { color: var(--accent); margin-right: 10px; font-size: 12px; }
+.mlist { font: 12px var(--mono); display: grid; gap: 2px; }
+.mlist div { display: flex; justify-content: space-between; color: var(--muted); }
+.mlist b { color: var(--text); font-weight: 500; }
+.keys { color: var(--muted); font-size: 12px; line-height: 1.9; }
+
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  .app { height: auto; }
+  main { grid-template-columns: 1fr; }
+  #stage { height: 62vh; }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
+  .meter { width: 80px; }
+  .chip.hide-s { display: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="sharpen"><feConvolveMatrix order="3" kernelMatrix="0 -1 0 -1 5 -1 0 -1 0" preserveAlpha="true"/></filter>
+</svg>
+<div class="app">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 32 32"><rect x="3" y="3" width="26" height="26" rx="5" fill="#143d2b"/><rect x="10" y="10" width="12" height="12" rx="1.5" fill="#10171d" stroke="#3ddc97" stroke-width="1.5"/><path d="M13 10V5M16 10V5M19 10V5M13 27v-5M16 27v-5M19 27v-5M5 13h5M5 16h5M5 19h5M27 13h-5M27 16h-5M27 19h-5" stroke="#d9e3c7" stroke-width="1.5"/></svg>
+      PCB Scope
+    </div>
+    <div class="chip" id="srcChip">no source</div>
+    <div class="focus" id="focusBox" title="Focus score (Laplacian variance). Bar is relative to the best seen — click to reset.">
+      <span class="lbl">Focus</span><div class="meter"><i id="focusBar"></i></div><span class="chip" id="focusVal">–</span>
+    </div>
+    <div class="chip hide-s" id="perfChip">OpenCV loading…</div>
+    <div class="spacer"></div>
+    <div class="hdr-btns">
+      <button id="btnFreeze" title="Freeze / resume (Space)">Freeze</button>
+      <button id="btnSnap" title="Save annotated PNG (S)">Save PNG</button>
+    </div>
+  </header>
+  <main>
+    <section id="stage">
+      <canvas id="cvImg"></canvas>
+      <canvas id="cvOvl"></canvas>
+      <div class="toolbar" id="toolbar">
+        <button data-tool="pan" title="Pan / select (V)">Select</button>
+        <button data-tool="measure" title="Measure (M)">Measure</button>
+        <button data-tool="calib" title="Calibrate scale (C)">Calibrate</button>
+        <button data-tool="ocr" title="Read marking (O)">OCR</button>
+        <span class="sep"></span>
+        <button id="zOut" title="Zoom out (-)">−</button>
+        <button id="zFit" title="Fit (0)">Fit</button>
+        <button id="zIn" title="Zoom in (+)">+</button>
+        <span class="sep"></span>
+        <button id="tGrid" title="Grid (G)">Grid</button>
+        <button id="tCross" title="Crosshair (X)">⌖</button>
+      </div>
+      <div class="statusbar" id="statusbar"></div>
+      <div class="tip" id="tip" hidden></div>
+      <div class="empty" id="empty">
+        <div class="card">
+          <h2>No image yet</h2>
+          <div>Start the microscope camera, open a photo of a board, or drop an image here.</div>
+          <div class="row">
+            <button class="primary" id="emptyCam">Start camera</button>
+            <button id="emptyOpen">Open image…</button>
+          </div>
+          <div class="hint" id="emptyMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div class="dialog" id="calDlg" hidden>
+        <h3>Calibrate scale</h3>
+        <div class="hint">Line: <b id="calPx">0</b> px. Enter its real length.</div>
+        <div class="presets" id="calPresetBtns"></div>
+        <div class="row"><input type="number" id="calMm" step="0.01" min="0.01" placeholder="mm"><span>mm</span></div>
+        <div class="row" style="justify-content:flex-end"><button id="calCancel">Cancel</button><button class="primary" id="calOk">Set scale</button></div>
+      </div>
+    </section>
+
+    <aside id="side">
+      <details open id="secSource">
+        <summary>Source <span class="aux" id="srcAux"></span></summary>
+        <div class="sec">
+          <div class="row"><select id="camSel" title="Camera"></select><button id="camBtn">Start</button></div>
+          <div class="row">
+            <select id="resSel" title="Requested resolution">
+              <option>640x480</option><option>1280x720</option><option>1920x1080</option><option>2592x1944</option><option>3840x2160</option>
+            </select>
+            <button id="openBtn">Open image…</button>
+            <input type="file" id="fileIn" accept="image/*" hidden>
+          </div>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="flipH"> Mirror</label>
+            <label class="check"><input type="checkbox" id="flipV"> Flip vertical</label>
+            <label class="check"><input type="checkbox" id="sharpen"> Sharpen</label>
+          </div>
+          <div class="slider"><label for="bri">Brightness</label><output id="briO"></output><input type="range" id="bri" min="40" max="200"></div>
+          <div class="slider"><label for="con">Contrast</label><output id="conO"></output><input type="range" id="con" min="40" max="250"></div>
+          <div class="slider"><label for="satr">Saturation</label><output id="satrO"></output><input type="range" id="satr" min="0" max="250"></div>
+          <details id="camCtlBox"><summary style="padding:4px 0;font-weight:500">Camera controls</summary><div id="camCtl" class="sec" style="padding:4px 0 0"></div></details>
+        </div>
+      </details>
+
+      <details open id="secDetect">
+        <summary>Detection <span class="aux" id="detAux"></span></summary>
+        <div class="sec">
+          <div class="row">
+            <label class="check"><input type="checkbox" id="detOn"> Run detection <kbd>D</kbd></label>
+          </div>
+          <div class="maskinfo" id="maskInfo"><span class="sw"></span><span>solder mask: –</span></div>
+          <div class="layers" id="layers"></div>
+          <div class="grp">Selected</div>
+          <div class="selbox" id="selBox">Click a detection on the image or in the list.</div>
+          <div class="grp">Parts</div>
+          <div class="list" id="detList"></div>
+          <div class="row"><button id="expJson">Export JSON</button><button id="expRaw">Save raw frame</button></div>
+        </div>
+      </details>
+
+      <details id="secCompare">
+        <summary>Golden-board compare <span class="aux" id="cmpAux"></span></summary>
+        <div class="sec">
+          <div class="hint">Capture a known-good board as reference, then put the board under test in view. Missing, extra, shifted or bridged parts show as red Δ regions.</div>
+          <div class="row"><button class="primary" id="refBtn">Set reference <kbd>R</kbd></button><button id="refLoad">Load image…</button><button id="refClear">Clear</button><input type="file" id="refFile" accept="image/*" hidden></div>
+          <div class="hint" id="refInfo">No reference.</div>
+          <label class="check"><input type="checkbox" id="cmpOn"> Compare live</label>
+          <div class="row"><span class="hint">Alignment</span><select id="alignSel"><option value="orb">Feature match (ORB + homography)</option><option value="none">None — fixed camera</option></select></div>
+          <div class="slider"><label>Difference threshold</label><output id="diffThrO"></output><input type="range" id="diffThr" min="8" max="120"></div>
+          <div class="slider"><label>Min region size (px)</label><output id="diffMinO"></output><input type="range" id="diffMin" min="2" max="60"></div>
+          <div class="slider"><label>Reference overlay</label><output id="refAlphaO"></output><input type="range" id="refAlpha" min="0" max="100"></div>
+          <label class="check"><input type="checkbox" id="blink"> Blink reference / live <kbd>B</kbd></label>
+          <div class="selbox" id="cmpStat">–</div>
+        </div>
+      </details>
+
+      <details id="secMeasure">
+        <summary>Measure &amp; scale <span class="aux" id="calAux"></span></summary>
+        <div class="sec">
+          <div class="hint" id="calInfo">Uncalibrated — sizes in pixels.</div>
+          <div class="row"><button id="calBtn">Calibrate…</button><button id="measBtn">Measure</button><button id="measClear">Clear lines</button></div>
+          <div class="hint">Calibrate by dragging along something of known length: header pitch 2.54 mm, an 0805 part (2.0 mm), or a ruler. Recalibrate when you change magnification — or save one preset per zoom setting.</div>
+          <div class="row"><select id="presetSel"><option value="">Magnification presets…</option></select><button id="presetSave" title="Save current scale as a preset">Save</button><button id="presetDel" title="Delete selected preset">Del</button></div>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="scalebar"> Scale bar</label>
+            <label class="check"><input type="checkbox" id="gridChk"> Grid</label>
+            <label class="check"><input type="checkbox" id="crossChk"> Crosshair</label>
+          </div>
+          <div class="mlist" id="mList"></div>
+        </div>
+      </details>
+
+      <details id="secOcr">
+        <summary>Read marking (OCR) <span class="aux" id="ocrAux"></span></summary>
+        <div class="sec">
+          <div class="hint">Pick the OCR tool and drag a box around a chip's top marking. Tesseract.js downloads from jsDelivr on first use (~15 MB, needs internet).</div>
+          <div class="row"><button id="ocrBtn">Select region <kbd>O</kbd></button><button id="ocrAgain" disabled>Run again</button></div>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="ocrWl" checked> IC charset</label>
+            <label class="check"><input type="checkbox" id="ocrRot" checked> Try rotations</label>
+          </div>
+          <div class="hint" id="ocrStatus"></div>
+          <div class="ocr-out" id="ocrOut"></div>
+          <div class="links" id="ocrLinks"></div>
+          <canvas class="ocr-prev" id="ocrPrev" hidden></canvas>
+        </div>
+      </details>
+
+      <details id="secTune">
+        <summary>Tuning</summary>
+        <div class="sec" id="tune"></div>
+      </details>
+
+      <details id="secKeys">
+        <summary>Shortcuts</summary>
+        <div class="sec keys">
+          <div><kbd>Space</kbd> freeze · <kbd>S</kbd> save PNG · <kbd>D</kbd> detection · <kbd>R</kbd> set reference · <kbd>B</kbd> blink</div>
+          <div><kbd>V</kbd> select · <kbd>M</kbd> measure · <kbd>C</kbd> calibrate · <kbd>O</kbd> OCR · <kbd>Esc</kbd> cancel</div>
+          <div><kbd>wheel</kbd> zoom · drag to pan · <kbd>dbl-click</kbd> zoom 4× / fit · <kbd>0</kbd> fit · <kbd>G</kbd> grid · <kbd>X</kbd> crosshair · <kbd>H</kbd> mirror</div>
+          <div><kbd>Shift</kbd>-drag keeps measure lines straight · <kbd>⌫</kbd> deletes the last line</div>
+          <div style="margin-top:6px">PCB Scope 1.0 · MIT licence · <a href="https://github.com/dhritiman-dasgupta/pcb-scope" target="_blank" rel="noopener" style="color:var(--accent)">source on GitHub</a></div>
+        </div>
+      </details>
+    </aside>
+  </main>
+</div>
+<video id="video" playsinline muted hidden></video>
+<script src="app.js"></script>
+</body>
+</html>
